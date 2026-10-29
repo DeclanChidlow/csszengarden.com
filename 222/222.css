@@ -284,6 +284,7 @@ Your friend,
 
 html {
 	overflow-inline: clip;
+	scrollbar-color: light-dark(var(--sky), var(--forest)) transparent;
 }
 
 body {
