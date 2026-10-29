@@ -556,38 +556,65 @@ body {
 			z-index: 2;
 			inline-size: 1.5rem;
 			block-size: 1.5rem;
-			background-image: radial-gradient(circle 1.5rem at 0 100%, transparent calc(100% - 0.0625rem), var(--panel-border) calc(100% - 0.0625rem) 100%, transparent 100%);
-			mask-image: radial-gradient(circle 1.5rem at 0 100%, transparent 0 calc(100% - 0.0625rem), #000 calc(100% - 0.0625rem));
+			/*
+			 * For (stupid) reasons beyond my comprehension, a tiny Safari layer can fill a gradient mask or border with the wrong colour until it is rasterised at a larger zoom.
+			 * Drawing the finished fillet as an image avoids that rasterisation path entirely. This is so dumb.
+			 */
+			--fillet-fill: light-dark(oklch(0.7162 0.0857 220.7), oklch(0.2505 0.0516 236.2));
+			background-color: var(--fillet-fill);
+			mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M0 0H24V24A24 24 0 0 0 0 0Z' fill='white'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat;
 			pointer-events: none;
 
-			/* Colours are hard coded here as blur and shadows and other complexity makes them too difficult to surmise. */
-			background-color: light-dark(#68b2c9, #032436);
-
 			@media (prefers-reduced-transparency: reduce) {
-				background-color: light-dark(#cee2ec, #0e212e);
-			}
-
-			@media (prefers-contrast: less) {
-				background-color: light-dark(#59b5cc, #022639);
+				--fillet-fill: light-dark(oklch(0.9 0.025 230), oklch(0.24 0.035 240));
 			}
 
 			@media (prefers-contrast: more) {
-				background-color: light-dark(#ecf5fa, #07131c);
+				--fillet-fill: light-dark(oklch(0.965 0.012 230), oklch(0.18 0.025 240));
 			}
 		}
 
-		/* Mirror the fillet and its arc when the writing direction is RTL. */
+		/* Mirror the fillet when the writing direction is RTL. */
 		:dir(rtl) .intro::before {
 			inset-inline-start: auto;
 			inset-inline-end: anchor(--intro-summary left);
-			background-image: radial-gradient(circle 1.5rem at 100% 100%, transparent calc(100% - 0.0625rem), var(--panel-border) calc(100% - 0.0625rem) 100%, transparent 100%);
-			mask-image: radial-gradient(circle 1.5rem at 100% 100%, transparent 0 calc(100% - 0.0625rem), #000 calc(100% - 0.0625rem));
+			transform: scaleX(-1);
 		}
 	}
 
 	/* Matching gloss heights keep the vertical highlight continuous across the join. */
 	:is(.summary > p:first-child, .preamble)::before {
 		block-size: 4rem;
+	}
+
+	@supports (anchor-name: --x) {
+		/* The summary's gloss moves to its background so its ::before can draw the fillet's arc. */
+		.summary > p:first-child {
+			background-image: var(--panel-gloss);
+			background-size: 100% 4rem;
+			background-repeat: no-repeat;
+		}
+
+		.summary > p:first-child::before {
+			content: "";
+			position: absolute;
+			inset-block-start: 100%;
+			inset-inline-start: auto;
+			inset-inline-end: 0;
+			z-index: 2;
+			inline-size: 1.5rem;
+			block-size: 1.5rem;
+			background: var(--panel-border);
+			mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M0 0.5A23.5 23.5 0 0 1 23.5 24' fill='none' stroke='white' stroke-width='1'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat;
+			border-radius: 0;
+			pointer-events: none;
+		}
+
+		:dir(rtl) .summary > p:first-child::before {
+			inset-inline-start: 0;
+			inset-inline-end: auto;
+			transform: scaleX(-1);
+		}
 	}
 }
 
@@ -770,6 +797,11 @@ header[role="banner"] {
 	--heading-fixed-block-start: calc(max(1rem, env(safe-area-inset-top)) + 0.65rem);
 	--heading-fixed-inline-start: max(2rem, calc((100vi - 80rem) / 2 + 2rem));
 	--heading-fixed-size: clamp(1.05rem, 1.8vi, 1.5rem);
+	--heading-inline-shift: calc(var(--heading-fixed-inline-start) - var(--heading-inline-start));
+
+	&:dir(rtl) {
+		--heading-inline-shift: calc(var(--heading-inline-start) - var(--heading-fixed-inline-start));
+	}
 
 	grid-area: masthead;
 	position: relative;
@@ -779,9 +811,11 @@ header[role="banner"] {
 	&::before {
 		content: "";
 		position: absolute;
-		inset-block-start: -3rem;
-		inset-block-end: -2rem;
-		inset-inline: -2rem;
+		/* Leave transparent padding around the ribbons so Safari clips the blur into it instead of cutting a hard edge. */
+		inset-block-start: -5rem;
+		inset-block-end: -4rem;
+		inset-inline: -4rem;
+		padding: 2rem;
 		z-index: -1;
 		background-image:
 			radial-gradient(
@@ -800,6 +834,8 @@ header[role="banner"] {
 				var(--clear) 64%
 			),
 			radial-gradient(ellipse var(--r3-w, 46%) var(--r3-h, 110%) at var(--r3-x, 82%) var(--r3-y, 8%), oklch(from var(--indigo) l c h / 0.2) 0%, var(--clear) 72%);
+		background-origin: content-box;
+		background-clip: content-box;
 		filter: blur(0.625rem);
 		opacity: 1;
 		pointer-events: none;
@@ -1467,22 +1503,25 @@ abbr[title] {
 	Scroll-driven fixed heading
 	================================================================= */
 
+/*
+ * Animate the heading's movement with transforms rather than inset properties. WebKit groups inset properties together across animations on the same element, so the vertical ride and the horizontal morph would otherwise cancel each other.
+ */
 @keyframes heading-ride {
 	from {
-		inset-block-start: var(--heading-block-start);
+		translate: 0 0;
 	}
 	to {
-		inset-block-start: var(--heading-fixed-block-start);
+		translate: 0 calc(var(--heading-fixed-block-start) - var(--heading-block-start));
 	}
 }
 
 @keyframes heading-morph {
 	from {
-		inset-inline-start: var(--heading-inline-start);
+		transform: translateX(0);
 		font-size: var(--heading-size);
 	}
 	to {
-		inset-inline-start: var(--heading-fixed-inline-start);
+		transform: translateX(var(--heading-inline-shift));
 		font-size: var(--heading-fixed-size);
 	}
 }
